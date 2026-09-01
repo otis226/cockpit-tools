@@ -1020,25 +1020,50 @@ fn antigravity_metadata_candidates(
     candidates
 }
 
+#[cfg(any(target_os = "windows", test))]
+fn select_antigravity_windows_version_info_for_scan(
+    scan_mode: AntigravityVersionScanMode,
+    product_json_info: Option<AntigravityInstalledVersionInfo>,
+    windows_native_info: Option<AntigravityInstalledVersionInfo>,
+) -> Option<AntigravityInstalledVersionInfo> {
+    match scan_mode {
+        AntigravityVersionScanMode::Full => windows_native_info.or(product_json_info),
+        AntigravityVersionScanMode::Quick => product_json_info,
+    }
+}
+
 fn resolve_antigravity_installed_version_info_for_target_with_mode(
     target: Option<&str>,
     scan_mode: AntigravityVersionScanMode,
 ) -> Option<AntigravityInstalledVersionInfo> {
     for root in antigravity_metadata_candidates(target, scan_mode) {
-        if let Some(info) = read_antigravity_product_json_metadata(&root) {
+        let product_json_info = read_antigravity_product_json_metadata(&root);
+
+        #[cfg(target_os = "windows")]
+        {
+            let windows_native_info = if scan_mode == AntigravityVersionScanMode::Full {
+                read_antigravity_windows_exe_metadata(&root)
+            } else {
+                None
+            };
+            if let Some(info) = select_antigravity_windows_version_info_for_scan(
+                scan_mode,
+                product_json_info,
+                windows_native_info,
+            ) {
+                return Some(info);
+            }
+            continue;
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        if let Some(info) = product_json_info {
             return Some(info);
         }
 
         #[cfg(target_os = "macos")]
         if let Some(info) = read_antigravity_macos_bundle_metadata(&root) {
             return Some(info);
-        }
-
-        #[cfg(target_os = "windows")]
-        if scan_mode == AntigravityVersionScanMode::Full {
-            if let Some(info) = read_antigravity_windows_exe_metadata(&root) {
-                return Some(info);
-            }
         }
     }
 

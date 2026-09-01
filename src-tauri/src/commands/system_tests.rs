@@ -4,7 +4,9 @@
         antigravity_metadata_root_matches_target_with_product_metadata,
         antigravity_product_json_target, apply_codex_quota_alert_thresholds,
         apply_general_config_updates, lock_general_config_transaction,
-        normalize_antigravity_metadata_root, read_antigravity_product_json_metadata, UserConfig,
+        normalize_antigravity_metadata_root, read_antigravity_product_json_metadata,
+        select_antigravity_windows_version_info_for_scan, AntigravityInstalledVersionInfo,
+        AntigravityVersionScanMode, UserConfig,
     };
     use std::path::{Path, PathBuf};
     use std::sync::mpsc;
@@ -50,6 +52,39 @@
             r#"{"nameShort":"Antigravity IDE","ideVersion":"1.2.3"}"#,
         )
         .expect("write product metadata");
+    }
+
+    fn antigravity_version_info(version: &str, source: &str) -> AntigravityInstalledVersionInfo {
+        AntigravityInstalledVersionInfo {
+            product_name: "Antigravity".to_string(),
+            version: version.to_string(),
+            app_path: r"C:\Program Files\Antigravity\Antigravity.exe".to_string(),
+            source: source.to_string(),
+        }
+    }
+
+    #[test]
+    fn windows_full_scan_prefers_native_app_version_over_ide_version() {
+        let product = Some(antigravity_version_info("1.23.2", "product.json"));
+        let native = Some(antigravity_version_info("2.11.0", "VersionInfo"));
+
+        let full = select_antigravity_windows_version_info_for_scan(
+            AntigravityVersionScanMode::Full,
+            product.clone(),
+            native.clone(),
+        )
+        .expect("full scan should resolve version info");
+        assert_eq!(full.version, "2.11.0");
+        assert_eq!(full.source, "VersionInfo");
+
+        let quick = select_antigravity_windows_version_info_for_scan(
+            AntigravityVersionScanMode::Quick,
+            product,
+            native,
+        )
+        .expect("quick scan should keep product metadata");
+        assert_eq!(quick.version, "1.23.2");
+        assert_eq!(quick.source, "product.json");
     }
 
     #[test]
